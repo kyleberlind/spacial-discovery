@@ -1,0 +1,15 @@
+{
+  "name": "spacial-discovery",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A walkable little world with a video store you can shop",
+  "scripts": {
+    "start": "python3 -m http.server 8777",
+    "test": "node test/game.test.js"
+  },
+  "devDependencies": {
+    "canvas": "2.11.2",
+    "jsdom": "22.1.0",
+    "phaser": "3.90.0"
+  }
+}
