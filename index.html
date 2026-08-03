@@ -11,17 +11,52 @@
     #panel {
       display: none;
       position: fixed;
-      top: 40px; left: 40px;
-      width: 420px;
+      top: 40px; left: 40px; right: 40px;
+      max-height: calc(100vh - 80px);
+      overflow-y: auto;
       background: #fff;
       border: 4px solid #000;
       padding: 16px;
-      line-height: 1.9;
       font-size: 11px;
     }
-    #panel h2 { font-size: 13px; margin: 0 0 12px; }
-    #panel ul { margin: 0; padding-left: 18px; }
-    #panel small { display: block; margin-top: 14px; color: #777; font-size: 9px; }
+    #panel h2 { font-size: 13px; margin: 0 0 14px; }
+    #panel h2 em { font-style: normal; color: #777; font-size: 9px; margin-left: 10px; }
+
+    /* as many covers as fit, however wide the window is */
+    #panel ul {
+      margin: 0;
+      padding: 0;
+      list-style: none;
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+      gap: 18px 14px;
+    }
+    #panel .film { display: flex; flex-direction: column; gap: 3px; }
+    #panel .film a { text-decoration: none; color: #000; }
+    #panel .art {
+      width: 100%;
+      aspect-ratio: 182 / 268; /* IMDb's poster crop. Holds the grid steady while covers load */
+      object-fit: cover;
+      background: #ddd;
+      border: 2px solid #000;
+      margin-bottom: 5px;
+      display: block;
+      font-size: 8px;
+    }
+    /* no cover to point at: same box, title in the middle of it */
+    #panel .art.none {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 8px;
+      color: #888;
+      line-height: 1.6;
+    }
+    #panel .film b { font-size: 10px; line-height: 1.5; }
+    #panel .film span { font-size: 8px; line-height: 1.6; color: #666; }
+
+    #panel > small { display: block; margin-top: 16px; color: #777; font-size: 9px; }
 
     #prompt {
       display: none;
@@ -42,7 +77,6 @@
 
 <script src="https://cdn.jsdelivr.net/npm/phaser@3.90.0/dist/phaser.min.js"></script>
 
-<script src="data/island-collisions.js"></script>
 <script src="data/movies.js"></script>
 
 <script src="js/panel.js"></script>

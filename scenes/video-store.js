@@ -1,95 +1,90 @@
 // The video store — inside the house on the island.
 //
-// No art: the room is drawn with rectangles and its size comes from the data.
-// One entry in data/movies.js === one aisle, and the room widens to fit.
-
-const SHOP_ROWS = 12
-const SHOP_COLS = 3 + MOVIES.length * 5
-const SHOP_DOOR_COL = Math.floor(SHOP_COLS / 2)
-
-const AISLE_TOP = 3
-const AISLE_ROWS = 7
-const AISLE_COLS = 2
+//   data/video-store.tmj   the room. Open it in Tiled and paint it.
+//
+// Same deal as the island: `ground` and `foreground` layers draw, `collision`
+// is what you can't walk through, and the `objects` layer says what things are.
+// Two kinds of object matter in here:
+//
+//   type `door`   name it after the scene it leads to ("island")
+//   type `shelf`  name it whatever you like — shelf_0, shelf_1 — and standing
+//                 next to it offers to browse its share of the Top 250
+//
+// Nothing decides what's on a shelf: data/movies.js is dealt out across all of
+// them, so adding a shelf in Tiled just means everything holds slightly less.
+//
+// Painting the shelf furniture is the collision layer's job — an object of type
+// shelf only marks the region, so a counter you can walk up to is a shelf object
+// with nothing painted under it.
 
 class VideoStore extends WalkScene {
   constructor() {
     super('video-store')
   }
 
-  loadPlace() {}
+  loadPlace() {
+    this.loadMap('shop-map', './data/video-store.tmj')
+  }
 
   buildPlace() {
-    this.worldSize = { width: SHOP_COLS * TILE, height: SHOP_ROWS * TILE }
-    this.spawn = { x: SHOP_DOOR_COL * TILE + 24, y: (SHOP_ROWS - 3) * TILE }
-
+    const map = this.buildMap('shop-map', 'video-store.tmj')
     this.cameras.main.setBackgroundColor('#23262e')
 
-    for (let x = 1; x < SHOP_COLS - 1; x++) {
-      for (let y = 1; y < SHOP_ROWS - 1; y++) {
-        const shade = (x + y) % 2 ? 0x3b3f4a : 0x434855
-        this.add.rectangle(x * TILE, y * TILE, TILE, TILE, shade).setOrigin(0, 0)
+    for (const object of map.getObjectLayer('objects').objects) {
+      // Tiled anchors a tile object — one you stamped from a tileset — by its
+      // bottom-left corner, but a plain rectangle by its top-left. Either way
+      // of marking a shelf should cover the same patch of floor.
+      const top = object.gid ? object.y - object.height : object.y
+      const box = rect(object.x, top, object.width, object.height)
+
+      if (object.type === 'door') {
+        this.doors.push({ rect: box, to: object.name, landing: this.landingFor(box) })
+        continue
+      }
+
+      if (object.type === 'shelf') {
+        // shelf_12 reads as SHELF 12 on the label above the aisle.
+        const label = object.name.replace(/_/g, ' ').toUpperCase()
+        this.shelves.push({ rect: box, label, films: [] })
       }
     }
 
-    const walls = this.physics.add.staticGroup()
-    for (let x = 0; x < SHOP_COLS; x++) {
-      for (let y = 0; y < SHOP_ROWS; y++) {
-        const isWall = x === 0 || y === 0 || x === SHOP_COLS - 1 || y === SHOP_ROWS - 1
-        if (!isWall || (x === SHOP_DOOR_COL && y === SHOP_ROWS - 1)) continue
-        this.add.rectangle(x * TILE, y * TILE, TILE, TILE, 0x23262e).setOrigin(0, 0)
-        const zone = this.add.zone(x * TILE, y * TILE, TILE, TILE).setOrigin(0, 0)
-        walls.add(zone)
-        zone.body.updateFromGameObject()
-      }
-    }
+    this.stockShelves()
 
-    // the doormat, and the way back out
-    this.add
-      .rectangle(SHOP_DOOR_COL * TILE, (SHOP_ROWS - 1) * TILE, TILE, TILE, 0x8a5a3b)
-      .setOrigin(0, 0)
-    this.doors.push({
-      rect: rect(SHOP_DOOR_COL * TILE, (SHOP_ROWS - 1) * TILE, TILE, TILE),
-      to: 'island',
-      landing: { x: SHOP_DOOR_COL * TILE + 24, y: (SHOP_ROWS - 3) * TILE }
-    })
+    // No spawn of its own: you only ever get here through the door, and the
+    // door's landing is where you end up. Kept so the scene still works if it's
+    // started directly.
+    this.spawn = this.doors[0].landing
+  }
 
-    const aisles = this.physics.add.staticGroup()
-    MOVIES.forEach((entry, i) => {
-      const x = (3 + i * 5) * TILE
-      const y = AISLE_TOP * TILE
-      const w = AISLE_COLS * TILE
-      const h = AISLE_ROWS * TILE
+  // Deal the whole Top 250 out across the shelves, one title at a time round
+  // the room, so every shelf gets within one of the same number.
+  //
+  // Seeded off nothing but the shop itself, so the shuffle comes out identical
+  // every time: walk out and back in, or reload, and Alien is still where you
+  // left it. Re-order the shelves in Tiled and the stock stays put too — the
+  // deal follows the shelf names, not the order the map happens to list them.
+  stockShelves() {
+    if (!this.shelves.length) return
+    console.log(this.shelves)
+    this.shelves.sort((a, b) => a.label.localeCompare(b.label, undefined, { numeric: true }))
 
-      this.add.rectangle(x, y, w, h, 0x6b4a2f).setOrigin(0, 0)
-      this.add.rectangle(x + 6, y + 6, w - 12, h - 12, 0x2c1d12).setOrigin(0, 0)
+    const deck = new Phaser.Math.RandomDataGenerator(['video-store']).shuffle(MOVIES.slice())
+    deck.forEach((film, i) => this.shelves[i % this.shelves.length].films.push(film))
+  }
 
-      // one spine per title
-      const perRow = 5
-      const sw = (w - 20) / perRow
-      entry.titles.forEach((title, n) => {
-        const hue = (title.length * 47 + n * 63) % 360
-        const colour = Phaser.Display.Color.HSVToRGB(hue / 360, 0.55, 0.75).color
-        this.add
-          .rectangle(x + 10 + (n % perRow) * sw, y + 14 + Math.floor(n / perRow) * 36, sw - 3, 26, colour)
-          .setOrigin(0, 0)
-      })
-
-      this.add.text(x, y - 16, entry.genre, { fontFamily: FONT, fontSize: '10px', color: '#f4d35e' })
-
-      const zone = this.add.zone(x, y, w, h).setOrigin(0, 0)
-      aisles.add(zone)
-      zone.body.updateFromGameObject()
-
-      // an aisle is a wall you can also read
-      this.shelves.push({ rect: rect(x, y, w, h), genre: entry.genre, titles: entry.titles })
-    })
-
-    this.solids.push(walls, aisles)
-
-    this.add.text(TILE + 8, TILE + 10, 'VIDEO', {
-      fontFamily: FONT,
-      fontSize: '14px',
-      color: '#f4d35e'
-    })
+  // Where you stand when you come in through this door: two tiles inward from
+  // whichever wall it's cut into. Two, because a door only re-arms once you've
+  // stepped clear of it — land on top of one and you bounce straight back out.
+  //
+  // A door is in a wall, so it's flush with an edge of the map; the edge it's
+  // touching is the one you walk away from. Anything not against an edge is
+  // treated as a doorway in the bottom wall, which is where they usually are.
+  landingFor(box) {
+    const step = TILE * 2
+    if (box.y <= 0) return { x: box.centerX, y: box.bottom + step }
+    if (box.x <= 0) return { x: box.right + step, y: box.centerY }
+    if (box.right >= this.worldSize.width) return { x: box.x - step, y: box.centerY }
+    return { x: box.centerX, y: box.y - step }
   }
 }

@@ -4,8 +4,9 @@
   "private": true,
   "description": "A walkable little world with a video store you can shop",
   "scripts": {
-    "start": "python3 -m http.server 8777",
-    "test": "node test/game.test.js"
+    "start": "node tools/dev.mjs",
+    "test": "node test/game.test.js",
+    "tilesets": "python3 tools/collect-tilesets.py"
   },
   "devDependencies": {
     "canvas": "2.11.2",

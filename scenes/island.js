@@ -1,41 +1,33 @@
 // The island — the overworld.
 //
-//   img/island.png             the ground, bare: no buildings painted into it
-//   img/island-foreground.png  treetops, drawn over you so you pass behind them
-//   data/island-collisions.js  terrain collision (cliffs, water, tree lines)
+//   data/island.tmj         the map itself. Open it in Tiled to build the
+//                           island: ground, foreground, collision, objects
+//   img/island-tileset.png  the tiles it's painted from
 //
-// Terrain collision is a tile grid because terrain *is* a grid. Buildings are
-// not: each one below carries its own walls and its own doorway, in its own
-// coordinates, so moving a building moves everything about it.
+// Both were recovered from the original flat artwork by tools/migrate-to-tiled.py.
+//
+// Terrain collision is the `collision` layer — paint a tile there and you can't
+// walk on it. It's hidden in game. It's a separate layer rather than a property
+// of each tile because the same grass tile is walkable in one place and a
+// barrier in another, which is how the original map fenced off its edges.
 
-const ISLAND_COLS = 70 // island.png is 3360x1920 === 70x40 tiles
-const ISLAND_ROWS = 40
-const SOLID = 1025 // what the Tiled export marks impassable tiles with
-
-// Footprints of the two houses painted out of the art by tools/split-map.py.
-// Their collision has to go with them. Only the footprint — the bushes that
-// flanked them are still drawn, and still block.
-const DEMOLISHED = [
-  { cols: [24, 27], rows: [12, 17] }, // the one that stood by the trees
-  { cols: [43, 48], rows: [7, 13] } // the one up on the plateau
-]
-
-const BUILDINGS = [
-  {
-    name: 'video-store', // also the key of the scene its door leads to
+// What a building *is*: its picture, its walls, its doorway. Every measurement
+// is relative to the building, so where it stands is the map's business — drag
+// it around the `objects` layer in Tiled and the walls follow.
+const BUILDINGS = {
+  'video-store': {
     texture: 'video-store',
-    at: { x: 1824, y: 992 }, // printed by tools/split-map.py
-    // All relative to `at`. The sprite is 288x304: roof down to y=256, then the
-    // front wall with the arch cut out of it.
+    // The sprite is 288x304: roof down to y=256, then the front wall with the
+    // arch cut out of it.
     solid: [
       { x: 0, y: 96, w: 288, h: 160 }, // roof and upper walls
       { x: 0, y: 256, w: 48, h: 48 }, // front wall, left of the door
       { x: 144, y: 256, w: 52, h: 48 } // front wall, right of the door
     ],
     door: { x: 48, y: 256, w: 96, h: 48 },
-    landing: { x: 1920, y: 1300 } // out on the street, below the arch
+    landing: { x: 96, y: 308 } // out on the street, just below the arch
   }
-]
+}
 
 class Island extends WalkScene {
   constructor() {
@@ -43,75 +35,45 @@ class Island extends WalkScene {
   }
 
   loadPlace() {
-    this.load.image('island', './img/island.png')
-    this.load.image('island-foreground', './img/island-foreground.png')
-    for (const b of BUILDINGS) this.load.image(b.texture, `./img/${b.texture}.png`)
+    this.loadMap('island-map', './data/island.tmj')
+
+    for (const { texture } of Object.values(BUILDINGS)) {
+      this.load.image(texture, `./img/${texture}.png`)
+    }
   }
 
   buildPlace() {
-    this.worldSize = { width: ISLAND_COLS * TILE, height: ISLAND_ROWS * TILE }
+    const map = this.buildMap('island-map', 'island.tmj')
     this.spawn = { x: 1224, y: 946 }
 
-    this.add.image(0, 0, 'island').setOrigin(0, 0).setDepth(0)
-
-    // Every tile a building stands on comes out of the terrain grid, because
-    // the building brings its own walls and its own doorway. Derived from where
-    // the sprite actually sits, so moving a building moves this with it.
-    const covered = BUILDINGS.map((b) => {
-      const art = this.textures.get(b.texture).getSourceImage()
-      return {
-        cols: [Math.floor(b.at.x / TILE), Math.floor((b.at.x + art.width - 1) / TILE)],
-        rows: [Math.floor(b.at.y / TILE), Math.floor((b.at.y + art.height - 1) / TILE)]
+    for (const object of map.getObjectLayer('objects').objects) {
+      if (object.type !== 'building') continue
+      const spec = BUILDINGS[object.name]
+      if (!spec) {
+        throw new Error(
+          `island.tmj places a building called "${object.name}", but there's no ` +
+            'entry for it in BUILDINGS in scenes/island.js'
+        )
       }
-    })
-    this.solids.push(this.buildTerrain(covered.concat(DEMOLISHED)))
-
-    for (const b of BUILDINGS) {
-      this.add.image(b.at.x, b.at.y, b.texture).setOrigin(0, 0).setDepth(1)
-
-      const walls = this.physics.add.staticGroup()
-      for (const s of b.solid) {
-        const zone = this.add.zone(b.at.x + s.x, b.at.y + s.y, s.w, s.h).setOrigin(0, 0)
-        walls.add(zone)
-        zone.body.updateFromGameObject()
-      }
-      this.solids.push(walls)
-
-      this.doors.push({
-        rect: rect(b.at.x + b.door.x, b.at.y + b.door.y, b.door.w, b.door.h),
-        to: b.name,
-        landing: b.landing
-      })
+      this.placeBuilding(object, spec)
     }
-
-    this.add.image(0, 0, 'island-foreground').setOrigin(0, 0).setDepth(10)
   }
 
-  buildTerrain(clear) {
-    const isClear = (col, row) =>
-      clear.some(
-        (r) => col >= r.cols[0] && col <= r.cols[1] && row >= r.rows[0] && row <= r.rows[1]
-      )
+  placeBuilding(at, spec) {
+    this.add.image(at.x, at.y, spec.texture).setOrigin(0, 0).setDepth(DEPTH.building)
 
-    // A tilemap layer rather than a heap of rectangles: it's what a real Tiled
-    // export would give us, so swapping one in later is a small change.
-    // The layer needs a tileset to exist but never draws one — collision is all
-    // we want from it, the ground is already painted into island.png.
-    if (!this.textures.exists('blank-tile')) this.textures.createCanvas('blank-tile', TILE, TILE)
-
-    const grid = []
-    for (let row = 0; row < ISLAND_ROWS; row++) {
-      const line = []
-      for (let col = 0; col < ISLAND_COLS; col++) {
-        const solid = islandCollisions[row * ISLAND_COLS + col] === SOLID && !isClear(col, row)
-        line.push(solid ? 0 : -1)
-      }
-      grid.push(line)
+    const walls = this.physics.add.staticGroup()
+    for (const s of spec.solid) {
+      const zone = this.add.zone(at.x + s.x, at.y + s.y, s.w, s.h).setOrigin(0, 0)
+      walls.add(zone)
+      zone.body.updateFromGameObject()
     }
+    this.solids.push(walls)
 
-    const map = this.make.tilemap({ data: grid, tileWidth: TILE, tileHeight: TILE })
-    const layer = map.createLayer(0, map.addTilesetImage('blank-tile'), 0, 0)
-    layer.setCollision(0)
-    return layer
+    this.doors.push({
+      rect: rect(at.x + spec.door.x, at.y + spec.door.y, spec.door.w, spec.door.h),
+      to: at.name, // the scene registered under the same name
+      landing: { x: at.x + spec.landing.x, y: at.y + spec.landing.y }
+    })
   }
 }

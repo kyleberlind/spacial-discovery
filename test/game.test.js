@@ -14,7 +14,6 @@ global.Phaser = Phaser
 const ROOT = path.join(__dirname, '..')
 
 for (const f of [
-  'data/island-collisions.js',
   'data/movies.js',
   'js/panel.js',
   'js/walk-scene.js',
@@ -167,18 +166,30 @@ game.events.once('ready', () =>
     check(stopped > 770 && stopped < 800, `terrain stopped us at the col 15 cliff (x = ${stopped}, expected ~782)`)
 
     // --- the building's own walls ------------------------------------------
-    // straight at the front wall, left of the door
-    island.player.setPosition(1850, 1330)
+    // Everything below is measured off the door the scene actually built, so
+    // dragging the building around in Tiled doesn't invalidate the test.
+    const door = island.doors[0]
+    check(door.to === 'video-store', `the island has a door to the shop (${door.to})`)
+
+    // the front wall sits immediately left of the arch, same height
+    island.player.setPosition(door.rect.x - 24, door.rect.bottom + 40)
     frames(2)
+    const wallFrom = island.player.y
     hold(island, 'W')
     frames(120)
     hold(island)
-    const wallY = island.player.y
-    check(wallY > 1280, `the house wall blocks you (stopped at y = ${Math.round(wallY)})`)
+    // compare the collision body, not the sprite: the body is the feet, 8px
+    // below the sprite's centre
+    const stoppedAt = island.player.body.top
+    check(
+      stoppedAt >= door.rect.bottom - 1 && island.player.y < wallFrom,
+      `the house wall blocks you (feet reached ${Math.round(stoppedAt)}, ` +
+        `wall bottom ${Math.round(door.rect.bottom)})`
+    )
     check(active().scene.key === 'island', 'walking into the wall does not open a door')
 
     // --- through the door --------------------------------------------------
-    island.player.setPosition(1920, 1330)
+    island.player.setPosition(door.landing.x, door.landing.y)
     frames(2)
     check(active().scene.key === 'island', 'standing below the arch does not teleport you')
     hold(island, 'W')
@@ -191,20 +202,54 @@ game.events.once('ready', () =>
     const shop = active()
     check(shop.scene.key === 'video-store', `walking into the arch enters the shop (${shop.scene.key})`)
 
+    // --- a door in any wall -------------------------------------------------
+    // You must land clear of the door you came in by, whichever wall it's in,
+    // or you bounce straight back out. Synthetic doors, one per wall.
+    const W = shop.worldSize.width
+    const H = shop.worldSize.height
+    const inward = {
+      top: shop.landingFor(new Phaser.Geom.Rectangle(480, 0, 48, 48)),
+      left: shop.landingFor(new Phaser.Geom.Rectangle(0, 480, 48, 48)),
+      right: shop.landingFor(new Phaser.Geom.Rectangle(W - 48, 480, 48, 48)),
+      bottom: shop.landingFor(new Phaser.Geom.Rectangle(480, H - 48, 48, 48))
+    }
+    check(inward.top.y > 48, `a door in the top wall lands you below it (y ${inward.top.y})`)
+    check(inward.left.x > 48, `a door in the left wall lands you right of it (x ${inward.left.x})`)
+    check(inward.right.x < W - 48, `a door in the right wall lands you left of it (x ${inward.right.x})`)
+    check(inward.bottom.y < H - 48, `a door in the bottom wall lands you above it (y ${inward.bottom.y})`)
+
     // --- browsing ----------------------------------------------------------
-    check(shop.shelves.length === MOVIES.length, `one aisle per genre (${shop.shelves.length})`)
-    hold(shop, 'A')
-    frames(60)
-    hold(shop)
+    // Everything in here is measured off what the scene actually built, so
+    // redrawing the shop in Tiled doesn't invalidate the test.
+    if (!shop.shelves.length) {
+      console.log(
+        '\nNo aisles on the map. In Tiled, add rectangles to the `objects` layer of\n' +
+          'data/video-store.tmj with Class `shelf`. Nothing below can run without them.'
+      )
+      process.exit(1)
+    }
+
+    // The whole list, dealt out, nothing dropped and nothing shelved twice.
+    const stock = shop.shelves.flatMap((s) => s.films)
+    check(stock.length === MOVIES.length, `all ${MOVIES.length} films are on a shelf (${stock.length})`)
+    check(new Set(stock).size === stock.length, 'no film is on two shelves at once')
+    const sizes = shop.shelves.map((s) => s.films.length)
+    check(
+      Math.max(...sizes) - Math.min(...sizes) <= 1,
+      `evenly across ${shop.shelves.length} shelves (${Math.min(...sizes)}-${Math.max(...sizes)} each)`
+    )
+
+    const aisle = shop.shelves[0]
+    shop.player.setPosition(aisle.rect.centerX, aisle.rect.centerY)
     frames(2)
-    check(!!shop.near, `standing beside an aisle is detected (${shop.near && shop.near.genre})`)
+    check(shop.near === aisle, `standing at an aisle is detected (${shop.near && shop.near.label})`)
 
     shop.onSpace()
     const panel = document.querySelector('#panel')
     check(panel.style.display === 'block', 'SPACE opens the browse panel')
     check(
-      (panel.innerHTML.match(/<li>/g) || []).length === shop.near.titles.length,
-      'the panel lists every title on that aisle'
+      (panel.innerHTML.match(/class="film"/g) || []).length === aisle.films.length,
+      'the panel shows a card per film on that aisle'
     )
 
     // movement must be frozen while reading
@@ -216,20 +261,17 @@ game.events.once('ready', () =>
     shop.onSpace()
     check(panel.style.display === 'none', 'SPACE again closes it')
 
-    // --- aisles are solid ---------------------------------------------------
-    const aisle = shop.shelves[1].rect
-    shop.player.setPosition(aisle.x + aisle.width / 2, aisle.y - 60)
-    frames(2)
-    hold(shop, 'S')
-    frames(90)
-    hold(shop)
-    check(shop.player.body.bottom <= aisle.y + 2, 'you cannot walk through an aisle')
-
     // --- back out -----------------------------------------------------------
+    // You land two tiles inside the door, so walking back at it is whichever
+    // direction the door lies in — which wall it's cut into is up to Tiled.
     shop.player.setPosition(shop.spawn.x, shop.spawn.y)
     frames(2)
-    hold(shop, 'S')
-    frames(90)
+    const out = shop.doors[0].rect
+    const dx = out.centerX - shop.spawn.x
+    const dy = out.centerY - shop.spawn.y
+    const back2door = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'D' : 'A') : dy > 0 ? 'S' : 'W'
+    hold(shop, back2door)
+    frames(90) // 270px at walking speed, against a landing two tiles out
     hold(shop)
     await waitForScene('island')
     frames(4)
@@ -237,9 +279,11 @@ game.events.once('ready', () =>
     check(back.scene.key === 'island', `the doormat takes you back outside (${back.scene.key})`)
     frames(20)
     check(active().scene.key === 'island', 'and you do not bounce straight back in')
+    const exit = back.doors[0].landing
     check(
-      Math.abs(back.player.x - 1920) < 40 && back.player.y > 1280,
-      `you come out below the arch (${Math.round(back.player.x)}, ${Math.round(back.player.y)})`
+      Math.abs(back.player.x - exit.x) < 40 && Math.abs(back.player.y - exit.y) < 40,
+      `you come out below the arch (${Math.round(back.player.x)}, ${Math.round(back.player.y)} ` +
+        `vs ${Math.round(exit.x)}, ${Math.round(exit.y)})`
     )
 
     console.log(failures ? `\n${failures} FAILED` : '\nall good')

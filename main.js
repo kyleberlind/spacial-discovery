@@ -12,6 +12,11 @@ const game = new Phaser.Game({
     width: '100%',
     height: '100%'
   },
+  // For 120 frames after every start, resume and refocus, Phaser clamps delta to
+  // one 60fps frame. Any frame that really took longer than that is charged as
+  // 16ms, so the world runs in slow motion until the cooldown ends. Off. The
+  // separate "delta over 200ms is nonsense" guard still catches tab switches.
+  fps: { panicMax: 0 },
   physics: {
     default: 'arcade',
     arcade: { debug: false } // flip to true to see every collision box

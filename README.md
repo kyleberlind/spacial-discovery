@@ -27,51 +27,96 @@ server and that's the whole toolchain.
 |---|---|
 | `main.js` | Phaser config — canvas, scaling, physics, the scene list |
 | `js/walk-scene.js` | the base scene: player, camera, input, doors. **Read this first** |
-| `scenes/island.js` | the overworld: terrain grid + `BUILDINGS` |
-| `scenes/video-store.js` | the shop interior, drawn with rectangles — no art needed |
+| `scenes/island.js` | the overworld: loads the map, places the buildings |
+| `scenes/video-store.js` | the shop interior: reads its doors and aisles off the map |
 | `js/panel.js` | the browse panel, plain HTML over the canvas |
-| `data/island-collisions.js` | 70×40 terrain grid, exported from Tiled |
-| `data/movies.js` | one entry per aisle — the shop widens to fit |
+| `data/island.tmj` | **the island itself — open this in [Tiled](https://www.mapeditor.org)** |
+| `img/island-tileset.png` | the 410 tiles it's painted from |
+| `data/video-store.tmj` | **the shop interior — open this in Tiled too** |
+| `data/movies.js` | the IMDb Top 250, dealt out across the shop's shelves |
 | `test/game.test.js` | boots the real game headless and walks the player around |
-| `tools/split-map.py` | regenerates the images from the upstream map |
+| `tools/collect-tilesets.py` | `npm run tilesets` — copies tileset art into `img/` |
+| `tools/split-map.py` | pulls the buildings out of the upstream map art |
+| `tools/migrate-to-tiled.py` | recovered the tileset and the Tiled map. One-shot |
+
+## Building the island
+
+Open `data/island.tmj` in [Tiled](https://www.mapeditor.org), paint, save,
+refresh the browser. Four layers:
+
+| layer | |
+|---|---|
+| `ground` | the island you walk on |
+| `foreground` | treetops, drawn over the player so you can pass behind them |
+| `collision` | paint a tile here and you can't walk on it. Hidden in game |
+| `objects` | buildings — drag one and its walls and doorway follow |
+
+Collision is its own layer rather than a property of each tile, because the same
+grass tile is walkable in one place and a barrier in another — that's how the
+original map fenced off its edges without drawing anything.
+
+## Building the shop
+
+`data/video-store.tmj`, same four layers, same rules. Its `objects` layer holds
+two kinds of rectangle:
+
+| Type | Name | |
+|---|---|---|
+| `door` | the scene it leads to (`island`) | you come out two tiles above it |
+| `shelf` | anything (`shelf_0`, `shelf_1`, …) | stand next to it and SPACE browses its share of the Top 250 |
+
+A shelf object only marks the region you can browse from — what you actually
+bump into is whatever you painted on `collision`. So a counter you can walk
+right up to is a shelf with nothing painted under it.
+
+It ships with the geometry of the old hand-drawn room — walls, doorway, four
+aisles — and nothing painted, so the floor is bare until you paint it.
+
+### Adding a tileset
+
+Add it in Tiled, tick **Embed Tileset**, save, then:
+
+    npm run tilesets
+
+Tiled remembers where the image was when you added it — usually `~/Downloads`,
+which the browser can't read. That copies it into `img/`, where the game looks
+for it by filename. Keep tileset filenames unique.
 
 ## Two kinds of collision
 
-Terrain is a **tile grid**, because terrain *is* a grid — cliffs, water, tree
-lines, straight out of the Tiled export.
+Terrain is a **tile grid**, because terrain *is* a grid — the `collision` layer
+above.
 
-Buildings are **not**. Each one carries its own walls and its own doorway, in
-its own coordinates:
+Buildings are **not**. Each one carries its own walls and doorway, measured
+relative to itself, so the map only has to say where it stands:
 
 ```js
-const BUILDINGS = [
-  {
-    name: 'video-store',            // also the scene its door leads to
-    texture: 'video-store',
-    at: { x: 1824, y: 992 },
-    solid: [                        // all relative to `at`
+const BUILDINGS = {
+  'video-store': {                  // matches the object name in island.tmj,
+    texture: 'video-store',         // and the scene the door leads to
+    solid: [
       { x: 0,   y: 96,  w: 288, h: 160 },  // roof and upper walls
       { x: 0,   y: 256, w: 48,  h: 48 },   // front wall, left of the door
       { x: 144, y: 256, w: 52,  h: 48 }    // front wall, right of the door
     ],
-    door: { x: 48, y: 256, w: 96, h: 48 },
-    landing: { x: 1920, y: 1300 }   // where you stand when you come back out
+    door:    { x: 48, y: 256, w: 96, h: 48 },
+    landing: { x: 96, y: 308 }      // where you stand when you come back out
   }
-]
+}
 ```
 
-Every tile a building's sprite covers is dropped from the terrain grid
-automatically, so the two never fight and the Tiled export stays untouched.
-Move `at` and the walls, the doorway and the cleared tiles all move with it.
+Everything is an offset from the building, so dragging it around the `objects`
+layer in Tiled moves the walls, the doorway and the landing spot with it.
 
 ## Adding a building
 
 1. Drop its PNG in `img/`.
-2. Add an entry to `BUILDINGS` — walk to the doorway and press `P` to read off
-   coordinates.
-3. Copy `scenes/video-store.js` for the inside, keyed to the same `name`.
-4. Add both to the `<script>` tags in `index.html` and the scene list in
-   `main.js`.
+2. In Tiled, add a rectangle to the `objects` layer, name it, and set its Type
+   to `building`. Put it where you want the house.
+3. Add a matching entry to `BUILDINGS` in `scenes/island.js` with its walls and
+   doorway, measured from the building's own top-left corner.
+4. Copy `scenes/video-store.js` for the inside, keyed to the same name.
+5. Add it to the `<script>` tags in `index.html` and the scene list in `main.js`.
 
 Doors find each other by name. A door's `landing` is where you stand when you
 arrive *there* through it, written in that scene's own coordinates — so neither
@@ -106,8 +151,7 @@ need a human with a browser.
 
 ## Where next
 
-Terrain still comes from a hand-edited Tiled array. The natural next step is
-authoring maps in Tiled proper and exporting JSON — Tiled's tile collision
-editor attaches shapes to tileset tiles, so collision would come from the
-tileset instead of a parallel array. `buildTerrain()` already uses a real
-tilemap layer, so swapping the data source is a small change.
+The shop interior is still rectangles drawn in code. If interiors start
+mattering it wants the same treatment as the island: a tileset, a `.tmj`, and
+`WalkScene` learning to build a place from a map instead of each scene doing it
+by hand.
