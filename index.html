@@ -69,7 +69,7 @@
         display: block;
         position: fixed;
         bottom: 0; left: 0; right: 0;
-        padding: 0 20px calc(20px + env(safe-area-inset-bottom)) 20px;
+        padding: 0 12px calc(12px + env(safe-area-inset-bottom)) 12px;
         pointer-events: none; /* only the buttons themselves take taps */
         touch-action: none;   /* no scrolling or double-tap zoom on the pad */
         user-select: none;
@@ -77,23 +77,23 @@
       }
       #pad button {
         pointer-events: auto;
-        width: 64px; height: 64px;
+        width: 46px; height: 46px;
         /* Press Start 2P is basic latin only — it has no arrows to draw, so the
            pad is the one place that opts out of the pixel font */
         font-family: system-ui, sans-serif;
-        font-size: 22px;
+        font-size: 15px;
         color: #fff;
         background: rgba(0, 0, 0, 0.45);
-        border: 3px solid rgba(255, 255, 255, 0.75);
-        border-radius: 10px;
+        border: 2px solid rgba(255, 255, 255, 0.6);
+        border-radius: 8px;
         padding: 0;
       }
       #pad button:active { background: rgba(255, 255, 255, 0.6); color: #000; }
 
       #pad .dpad {
         display: grid;
-        grid-template-columns: repeat(3, 64px);
-        gap: 8px;
+        grid-template-columns: repeat(3, 46px);
+        gap: 4px;
         width: max-content;
       }
       #pad .dpad [data-dir="up"] { grid-area: 1 / 2; }
@@ -103,15 +103,15 @@
 
       #pad .act {
         position: absolute;
-        right: 20px;
-        bottom: calc(40px + env(safe-area-inset-bottom));
-        width: 80px; height: 80px;
+        right: 12px;
+        bottom: calc(28px + env(safe-area-inset-bottom));
+        width: 56px; height: 56px;
         border-radius: 50%;
       }
 
       /* keep the last row of covers clear of the pad */
-      #panel { padding-bottom: 140px; }
-      #prompt { bottom: 232px; }
+      #panel { padding-bottom: 110px; }
+      #prompt { bottom: 172px; }
     }
 
     #prompt {
