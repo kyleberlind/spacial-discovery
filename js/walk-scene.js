@@ -89,6 +89,7 @@ class WalkScene extends Phaser.Scene {
 
     this.keys = this.input.keyboard.addKeys('W,A,S,D,UP,DOWN,LEFT,RIGHT,SHIFT,F,P')
     this.input.keyboard.on('keydown-SPACE', this.onSpace, this)
+    onTouchAction(() => this.onSpace())
     this.input.keyboard.on('keydown-F', () => this.scale.toggleFullscreen())
     this.input.keyboard.on('keydown-P', () => {
       const col = Math.floor(this.player.x / TILE)
@@ -232,6 +233,9 @@ class WalkScene extends Phaser.Scene {
   // recently wins, so tapping a new one while still holding the old turns you
   // rather than doing nothing until you let go.
   heading() {
+    const touched = touchHeading()
+    if (touched) return DIRECTIONS.find((d) => d.name === touched)
+
     let chosen = null
     let pressedAt = -1
     for (const dir of DIRECTIONS) {
@@ -283,7 +287,7 @@ class WalkScene extends Phaser.Scene {
     this.near = this.shelves.find((s) =>
       Phaser.Geom.Rectangle.Overlaps(feet, rect(s.rect.x - 8, s.rect.y - 8, s.rect.width + 16, s.rect.height + 16))
     )
-    showPrompt(this.near ? `SPACE to browse ${this.near.label}` : null)
+    showPrompt(this.near ? `${ACTION} to browse ${this.near.label}` : null)
   }
 
   onSpace() {

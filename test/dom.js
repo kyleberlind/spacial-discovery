@@ -7,6 +7,10 @@ const { JSDOM } = require('jsdom')
 const dom = new JSDOM(
   '<!doctype html><html><body>' +
     '<div id="game"></div><div id="panel"></div><div id="prompt"></div>' +
+    // the touch pad, same shape as index.html so touch.js can wire itself up
+    '<div id="pad"><div class="dpad">' +
+    ['up', 'left', 'right', 'down'].map((d) => `<button data-dir="${d}"></button>`).join('') +
+    '</div><button class="act"></button></div>' +
     '</body></html>',
   {
     pretendToBeVisual: true,

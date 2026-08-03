@@ -16,6 +16,7 @@ const ROOT = path.join(__dirname, '..')
 for (const f of [
   'data/movies.js',
   'js/panel.js',
+  'js/touch.js',
   'js/walk-scene.js',
   'scenes/island.js',
   'scenes/video-store.js'
@@ -142,6 +143,21 @@ game.events.once('ready', () =>
       'letting go of Shift drops back to a walk'
     )
 
+    // --- touch controls -----------------------------------------------------
+    // A phone has no keyboard, so the d-pad has to drive movement on its own.
+    hold(island)
+    frames(2)
+    const press = (el, type) => el.dispatchEvent(new window.Event(type, { bubbles: true }))
+
+    press(document.querySelector('#pad [data-dir="up"]'), 'pointerdown')
+    frames(5)
+    check(island.player.body.velocity.y === -180, `the d-pad walks you up (${island.player.body.velocity.y})`)
+    check(island.facing === 'up', 'and turns you to face that way')
+
+    press(window, 'pointerup')
+    frames(5)
+    check(island.player.body.velocity.y === 0, 'lifting your finger stops you')
+
     // sprinting must not punch through a wall
     island.player.setPosition(35 * 48, 1015)
     frames(2)
@@ -244,7 +260,7 @@ game.events.once('ready', () =>
     frames(2)
     check(shop.near === aisle, `standing at an aisle is detected (${shop.near && shop.near.label})`)
 
-    shop.onSpace()
+    press(document.querySelector('#pad .act'), 'pointerdown')
     const panel = document.querySelector('#panel')
     check(panel.style.display === 'block', 'SPACE opens the browse panel')
     check(
@@ -258,7 +274,7 @@ game.events.once('ready', () =>
     frames(30)
     check(shop.player.x === frozen.x, 'you cannot walk while the panel is open')
     hold(shop)
-    shop.onSpace()
+    press(document.querySelector('#pad .act'), 'pointerdown')
     check(panel.style.display === 'none', 'SPACE again closes it')
 
     // --- back out -----------------------------------------------------------
