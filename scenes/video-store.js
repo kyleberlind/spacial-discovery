@@ -68,6 +68,7 @@ class VideoStore extends WalkScene {
     if (!this.shelves.length) return
     console.log(this.shelves)
     this.shelves.sort((a, b) => a.label.localeCompare(b.label, undefined, { numeric: true }))
+    
 
     const deck = new Phaser.Math.RandomDataGenerator(['video-store']).shuffle(MOVIES.slice())
     deck.forEach((film, i) => this.shelves[i % this.shelves.length].films.push(film))
